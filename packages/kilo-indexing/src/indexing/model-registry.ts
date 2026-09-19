@@ -57,7 +57,6 @@ const profiles: Record<string, Record<string, ModelProfile>> = {
 }
 
 const defaults: Record<string, string> = {
-  kilo: "",
   openai: "text-embedding-3-small",
   ollama: "nomic-embed-text",
   gemini: "gemini-embedding-001",
@@ -83,10 +82,6 @@ export function getModelScoreThreshold(provider: EmbedderProvider, modelId: stri
 
 export function getModelQueryPrefix(provider: EmbedderProvider, modelId: string): string | undefined {
   return profiles[provider]?.[modelId]?.queryPrefix
-}
-
-export function normalizeKiloModelId(modelId: string | undefined): string | undefined {
-  return modelId
 }
 
 export function hasModelProfile(provider: EmbedderProvider, modelId: string | undefined): boolean {

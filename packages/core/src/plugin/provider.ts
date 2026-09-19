@@ -14,7 +14,6 @@ import { GitLabPlugin } from "./provider/gitlab"
 import { GooglePlugin } from "./provider/google"
 import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/google-vertex"
 import { GroqPlugin } from "./provider/groq"
-import { KiloPlugin } from "./provider/kilo"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
 import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
@@ -51,7 +50,6 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   GoogleVertexAnthropicPlugin,
   GoogleVertexPlugin,
   GroqPlugin,
-  KiloPlugin,
   LLMGatewayPlugin,
   MistralPlugin,
   NvidiaPlugin,

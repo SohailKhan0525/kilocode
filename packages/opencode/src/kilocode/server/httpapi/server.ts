@@ -19,7 +19,6 @@ import { configConsoleHandlers } from "./handlers/config-console"
 import { enhancePromptHandlers } from "./handlers/enhance-prompt"
 import { indexingHandlers } from "./handlers/indexing"
 import { instanceReloadHandlers } from "./handlers/instance-reload"
-import { kiloGatewayHandlers } from "./handlers/kilo-gateway"
 import { kilocodeHandlers } from "./handlers/kilocode"
 import { memoryHandlers } from "./handlers/memory"
 import { migrateHandlers } from "./handlers/migrate"
@@ -40,7 +39,6 @@ export const provide = Layer.provide([
   enhancePromptHandlers,
   indexingHandlers,
   instanceReloadHandlers,
-  kiloGatewayHandlers,
   kilocodeHandlers,
   memoryHandlers,
   migrateHandlers,

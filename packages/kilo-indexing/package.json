@@ -17,7 +17,6 @@
     ".": "./src/index.ts",
     "./config": "./src/config.ts",
     "./detect": "./src/detect.ts",
-    "./embedding-models": "./src/kilo-embedding-models.ts",
     "./engine": "./src/indexing/index.ts",
     "./file-extensions": "./src/file-extensions.ts",
     "./server": "./src/server/routes.ts",
@@ -36,7 +35,6 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.1005.0",
     "@aws-sdk/credential-provider-ini": "3.972.31",
-    "@kilocode/kilo-gateway": "workspace:*",
     "@kilocode/plugin": "workspace:*",
     "@lancedb/lancedb": "0.26.2",
     "@parcel/watcher": "2.5.1",

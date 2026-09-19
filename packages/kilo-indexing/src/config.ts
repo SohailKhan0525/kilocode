@@ -9,7 +9,6 @@ export { DEFAULT_VECTOR_STORE } from "./indexing/constants"
 export { isFileExtension, normalizeFileExtensions, parseFileExtensions } from "./file-extensions"
 
 const providers = [
-  "kilo",
   "openai",
   "ollama",
   "openai-compatible",
@@ -35,15 +34,6 @@ export const IndexingConfig = z
       .optional()
       .describe("Override embedding vector dimension (auto-detected from model if omitted)"),
     vectorStore: z.enum(stores).optional().describe("Vector store backend (default: lancedb)"),
-    kilo: z
-      .object({
-        apiKey: z.string().optional(),
-        baseUrl: z.string().optional(),
-        organizationId: z.string().optional(),
-      })
-      .strict()
-      .optional()
-      .describe("Kilo-hosted embedding provider options"),
     openai: z
       .object({ apiKey: z.string().optional() })
       .strict()
@@ -158,13 +148,6 @@ export const IndexingSchema = Schema.Struct({
     description: "Override embedding vector dimension (auto-detected from model if omitted)",
   }),
   vectorStore: Schema.optional(Store).annotate({ description: "Vector store backend (default: lancedb)" }),
-  kilo: Schema.optional(
-    Schema.Struct({
-      apiKey: Schema.optional(Schema.String),
-      baseUrl: Schema.optional(Schema.String),
-      organizationId: Schema.optional(Schema.String),
-    }),
-  ).annotate({ description: "Kilo-hosted embedding provider options" }),
   openai: Schema.optional(
     Schema.Struct({
       apiKey: Schema.optional(Schema.String),
@@ -265,9 +248,6 @@ export function toIndexingConfigInput(cfg: IndexingConfig | undefined): Indexing
     embeddingBatchSize: cfg?.embeddingBatchSize,
     scannerMaxBatchRetries: cfg?.scannerMaxBatchRetries,
     fileExtensions: normalizeFileExtensions(cfg?.fileExtensions),
-    kiloApiKey: cfg?.kilo?.apiKey,
-    kiloBaseUrl: cfg?.kilo?.baseUrl,
-    kiloOrganizationId: cfg?.kilo?.organizationId,
     openAiKey: cfg?.openai?.apiKey,
     ollamaBaseUrl: cfg?.ollama?.baseUrl,
     openAiCompatibleBaseUrl: cfg?.["openai-compatible"]?.baseUrl,

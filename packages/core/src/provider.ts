@@ -3,8 +3,7 @@ export * as ProviderV2 from "./provider"
 import { Types } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 
-// kilocode_change - preserve Kilo's well-known routing ID without forking the shared schema
-export const ID = Object.assign(Provider.ID, { kilo: Provider.ID.make("kilo") })
+export const ID = Provider.ID
 export type ID = typeof ID.Type
 
 export const AISDK = Provider.AISDK

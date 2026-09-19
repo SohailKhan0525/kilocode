@@ -1,4 +1,3 @@
-import { KILO_API_BASE } from "./api/constants.js"
 import { getAutocompleteModel, type DirectAutocompleteProviderID } from "./autocomplete.js"
 
 /**
@@ -10,9 +9,7 @@ export const DIRECT_EDIT_ENV: Record<DirectAutocompleteProviderID, string[]> = {
   inception: ["INCEPTION_API_KEY"],
 }
 
-export type EditTarget =
-  | { provider: "inception"; model: string; url: string }
-  | { provider: "kilo"; model: string; url: string }
+export type EditTarget = { provider: "inception"; model: string; url: string }
 
 /** Shape of the upstream (Mercury) chat/edit completion response we read from. */
 export interface EditUpstreamResponse {
@@ -21,7 +18,6 @@ export interface EditUpstreamResponse {
 }
 
 const INCEPTION_EDIT_URL = "https://api.inceptionlabs.ai/v1/edit/completions"
-const KILO_NEXTEDIT_URL = KILO_API_BASE + "/api/edit/completions"
 
 /**
  * Pick the upstream edit endpoint for a (provider, model) pair. Today this is
@@ -31,21 +27,10 @@ const KILO_NEXTEDIT_URL = KILO_API_BASE + "/api/edit/completions"
  */
 export function resolveEditTarget(provider?: string, model?: string): EditTarget {
   const info = getAutocompleteModel(provider, model)
-  if (info.kind === "edit") {
-    if (info.providerID === "kilo") {
-      // The gateway expects the upstream model id with the `inception/` prefix
-      // (it strips it before forwarding to Inception). The kilo entry's
-      // `requestModel` already carries the prefix.
-      const m = info.requestModel.includes("/") ? info.requestModel : `inception/${info.requestModel}`
-      return { provider: "kilo", model: m, url: KILO_NEXTEDIT_URL }
-    }
-    if (info.directProvider === "inception") {
-      return { provider: "inception", model: info.requestModel, url: INCEPTION_EDIT_URL }
-    }
+  if (info.kind === "edit" && info.directProvider === "inception") {
+    return { provider: "inception", model: info.requestModel, url: INCEPTION_EDIT_URL }
   }
-  // Non-edit models fall through to a kilo placeholder with no URL so the
-  // handler can surface a 400 rather than silently routing somewhere unexpected.
-  return { provider: "kilo", model: info.requestModel, url: "" }
+  throw new Error("Unsupported autocomplete edit provider")
 }
 
 /**

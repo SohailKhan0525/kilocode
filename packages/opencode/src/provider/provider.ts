@@ -32,18 +32,9 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 // kilocode_change start
 import {
-  KILO_BUNDLED_PROVIDERS,
   kiloCustomLoaders,
-  KILO_MODEL_SCHEMA_EXTENSIONS,
-  patchModelsDevModel as patchKiloModel,
-  patchConfigModel as patchKiloConfigModel,
   customProviderVariants,
   patchCustomLoaderResult,
-  patchKiloProviderPrivacy,
-  patchKiloProviderAuth,
-  publicKiloProvider,
-  kiloSmallModelPriority,
-  hasKiloCredentials,
   buildTimeoutSignal,
   requestTimeout,
   wrapFirstByte,
@@ -152,7 +143,6 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/github-copilot": () =>
     import("@opencode-ai/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
-  ...KILO_BUNDLED_PROVIDERS, // kilocode_change
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
@@ -891,16 +881,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    kilo: () =>
-      Effect.succeed({
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://kilo.ai/",
-            "X-Title": "Kilo Code", // kilocode_change
-          },
-        },
-      }),
     "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const auth = yield* dep.auth(input.id)
@@ -1099,7 +1079,6 @@ export const Model = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
-  ...KILO_MODEL_SCHEMA_EXTENSIONS, // kilocode_change
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1136,7 +1115,7 @@ export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
     JSON.stringify(
       {
-        ...publicKiloProvider(provider), // kilocode_change
+        ...provider
         models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
       },
       (_, value) => {
@@ -1310,7 +1289,6 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     release_date: model.release_date ?? "",
     variants: {},
   }
-  Object.assign(base, patchKiloModel(provider.id, model)) // kilocode_change
   const variants = ProviderTransform.reasoningVariants(model, base) ?? ProviderTransform.variants(base) // kilocode_change
 
   return {
@@ -1563,8 +1541,6 @@ const layer = Layer.effect(
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
-              // variants: {}, // kilocode_change, moved into patchKiloConfigModel
-              ...patchKiloConfigModel(model, existingModel), // kilocode_change
             }
             // kilocode_change start
             const baseGenerate = (m: typeof parsedModel) =>
@@ -1647,7 +1623,7 @@ const layer = Layer.effect(
         // kilocode_change start - resolve env once for patchCustomLoaderResult (azure env fallback)
         const kiloEnv = yield* env.all()
         // kilocode_change end
-        for (const [id, fn] of Object.entries({ ...custom(dep), ...kiloCustomLoaders(dep) })) {
+        for (const [id, fn] of Object.entries({ ...custom(dep), ...kiloCustomLoaders() })) {
           // kilocode_change
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
@@ -1681,8 +1657,6 @@ const layer = Layer.effect(
           if (provider.options) partial.options = provider.options
           mergeProvider(providerID, partial)
         }
-        patchKiloProviderPrivacy(providers[ProviderV2.ID.make("kilo")], cfg) // kilocode_change
-        patchKiloProviderAuth(providers[ProviderV2.ID.make("kilo")], cfg, auths["kilo"]) // kilocode_change
 
         const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
@@ -2019,16 +1993,6 @@ const layer = Layer.effect(
         return undefined
       }
 
-      // kilocode_change start - Kilo's auto model is an ID, while upstream priorities are model families.
-      const kiloPriority = kiloSmallModelPriority(providerID)
-      if (kiloPriority) {
-        for (const id of kiloPriority) {
-          const model = provider.models[id]
-          if (model) return model
-        }
-      }
-      // kilocode_change end
-
       const priority = providerID.startsWith("opencode")
         ? ["gpt-nano"]
         : providerID.startsWith("github-copilot")
@@ -2062,21 +2026,6 @@ const layer = Layer.effect(
         }
         if (candidates[0]) return candidates[0]
       }
-
-      // kilocode_change start - fall back to kilo's auto small model only when the user actually has
-      // kilo credentials. The kilo provider is always autoloaded (anonymous key), so checking it
-      // unconditionally would route auxiliary tasks (session titles, commit messages, branch names)
-      // to the cloud for users without kilo access and break offline/local-only setups.
-      const kiloFallback = s.providers[ProviderV2.ID.make("kilo")]
-      if (kiloFallback?.models["kilo-auto/small"]) {
-        const hasCreds = hasKiloCredentials(
-          cfg,
-          yield* auth.get(ProviderV2.ID.make("kilo")).pipe(Effect.orDie),
-          yield* env.all(),
-        )
-        if (hasCreds) return kiloFallback.models["kilo-auto/small"]
-      }
-      // kilocode_change end
 
       return undefined
     })

@@ -6,99 +6,14 @@
 // This module exports patch functions and data that the upstream provider.ts
 // calls at well-defined injection points (each marked with kilocode_change).
 
-import { createKilo, type KiloProvider, AI_SDK_PROVIDERS, PROMPTS } from "@kilocode/kilo-gateway"
 import { DEFAULT_HEADERS } from "@/kilocode/const"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderError } from "@/provider/error"
-import { Effect, Schema } from "effect"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { mapValues, omit, pickBy } from "remeda"
+import { Effect } from "effect"
 import { reasoningSummary } from "./reasoning-summary"
 import type { Provider } from "@/provider/provider"
-import type { Auth } from "@/auth"
-import type { Config } from "@/config/config"
-import { organization, token } from "./catalog"
 
 /** Default timeout (ms) for provider HTTP requests (connection phase). */
 export const REQUEST_TIMEOUT_MS = 300_000 // 5 minutes
-
-// ---------------------------------------------------------------------------
-// Bundled providers
-// ---------------------------------------------------------------------------
-
-type BundledSDK = { languageModel(modelId: string): LanguageModelV3 }
-
-export const KILO_BUNDLED_PROVIDERS: Record<string, () => Promise<(options: any) => BundledSDK>> = {
-  "@kilocode/kilo-gateway": async () => createKilo as unknown as (options: any) => BundledSDK,
-}
-
-// ---------------------------------------------------------------------------
-// Model schema extensions  (spread into Provider.Model Schema.Struct)
-// ---------------------------------------------------------------------------
-
-export const KILO_MODEL_SCHEMA_EXTENSIONS = {
-  recommendedIndex: optionalOmitUndefined(Schema.Finite),
-  prompt: Schema.optional(Schema.Literals(PROMPTS)),
-  isFree: Schema.optional(Schema.Boolean),
-  mayTrainOnYourPrompts: Schema.optional(Schema.Boolean),
-  hasUserByokAvailable: Schema.optional(Schema.Boolean),
-  terminalBench: optionalOmitUndefined(
-    Schema.Struct({
-      overallScore: Schema.Finite,
-      avgAttemptCostUsd: Schema.Finite,
-    }),
-  ),
-  autoRouting: optionalOmitUndefined(
-    Schema.Struct({
-      models: Schema.Array(Schema.String),
-    }),
-  ),
-  ai_sdk_provider: Schema.optional(Schema.Literals(AI_SDK_PROVIDERS)),
-}
-
-// ---------------------------------------------------------------------------
-// fromModelsDevModel patch — returns kilo-specific fields
-// ---------------------------------------------------------------------------
-
-export function patchModelsDevModel(providerID: string, source: any) {
-  return {
-    variants: providerID === "kilo" ? (source.variants ?? {}) : {},
-    recommendedIndex: source.recommendedIndex,
-    prompt: source.prompt,
-    isFree: source.isFree,
-    mayTrainOnYourPrompts: source.mayTrainOnYourPrompts,
-    hasUserByokAvailable: source.hasUserByokAvailable,
-    terminalBench: source.terminalBench,
-    autoRouting: source.autoRouting,
-    ai_sdk_provider: source.ai_sdk_provider,
-    options: source.options ?? {},
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Config model patch — merges kilo-specific fields from config + existing
-// ---------------------------------------------------------------------------
-
-export function patchConfigModel(cfg: any, existing: any) {
-  return {
-    recommendedIndex: cfg.recommendedIndex ?? existing?.recommendedIndex,
-    prompt: cfg.prompt ?? existing?.prompt,
-    isFree: cfg.isFree ?? existing?.isFree,
-    mayTrainOnYourPrompts: cfg.mayTrainOnYourPrompts ?? existing?.mayTrainOnYourPrompts,
-    hasUserByokAvailable: cfg.hasUserByokAvailable ?? existing?.hasUserByokAvailable,
-    terminalBench: existing?.terminalBench,
-    autoRouting: existing?.autoRouting,
-    ai_sdk_provider: cfg.ai_sdk_provider ?? existing?.ai_sdk_provider,
-    variants: cfg.variants
-      ? mapValues(
-          pickBy(cfg.variants, (v) => !!v && !v.disabled),
-          (v) => omit(v, ["disabled"]),
-        )
-      : {},
-  }
-}
 
 const CUSTOM_PROVIDER_PACKAGES = new Set(["@ai-sdk/openai-compatible", "@ai-sdk/openai", "@ai-sdk/anthropic"])
 const FALLBACK_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
@@ -137,13 +52,6 @@ export function customProviderVariants(model: Provider.Model, npm: unknown, gene
 // Custom loaders (new or fully-replaced loaders)
 // ---------------------------------------------------------------------------
 
-type CustomDep = {
-  auth: (id: string) => Effect.Effect<any | undefined>
-  config: () => Effect.Effect<any>
-  env: () => Effect.Effect<Record<string, string | undefined>>
-  get: (key: string) => Effect.Effect<string | undefined>
-}
-
 // Mirrors upstream's CustomLoader return type so Object.entries preserves proper typing
 type CustomLoaderResult = {
   autoload: boolean
@@ -165,30 +73,7 @@ function useLanguageModel(sdk: any) {
   return sdk.responses === undefined && sdk.chat === undefined
 }
 
-export function patchKiloProviderPrivacy(provider: { options?: Record<string, any> } | undefined, config: any) {
-  if (!provider || config.hide_prompt_training_models !== true) return
-  provider.options = { ...provider.options, dataCollection: "deny" }
-}
-
-export function patchKiloProviderAuth(
-  provider: Provider.Info | undefined,
-  config: Config.Info,
-  info: Auth.Info | undefined,
-) {
-  if (!provider) return
-  const options = config.provider?.kilo?.options
-  const key = token(options, info)
-  const org = organization(options, info)
-  if (key !== undefined) provider.options.kilocodeToken = key
-  if (org !== undefined) provider.options.kilocodeOrganizationId = org
-}
-
-export function publicKiloProvider(provider: Provider.Info): Provider.Info {
-  if (provider.id !== "kilo") return provider
-  return { ...provider, key: undefined, options: omit(provider.options, ["apiKey", "kilocodeToken"]) }
-}
-
-export function kiloCustomLoaders(dep: CustomDep): Record<string, CustomLoader> {
+export function kiloCustomLoaders(): Record<string, CustomLoader> {
   return {
     "github-copilot-enterprise": () =>
       Effect.succeed({
@@ -199,40 +84,6 @@ export function kiloCustomLoaders(dep: CustomDep): Record<string, CustomLoader> 
         },
         options: {},
       }),
-
-    kilo: Effect.fnUntraced(function* (input: any) {
-      const env = yield* dep.env()
-      const config = yield* dep.config()
-      const hasKey = yield* Effect.gen(function* () {
-        if (input.env.some((item: string) => env[item])) return true
-        if (yield* dep.auth(input.id)) return true
-        if (config.provider?.["kilo"]?.options?.apiKey) return true
-        return false
-      })
-
-      const options: Record<string, string> = {}
-      if (env.KILO_ORG_ID) {
-        options.kilocodeOrganizationId = env.KILO_ORG_ID
-      }
-      if (config.hide_prompt_training_models === true) {
-        options.dataCollection = "deny"
-      }
-      if (!hasKey) {
-        options.apiKey = "anonymous"
-      }
-
-      return {
-        autoload: Object.keys(input.models).length > 0,
-        options,
-        async getModel(sdk: KiloProvider, modelID: string) {
-          const provider = input.models[modelID]?.ai_sdk_provider
-          if (provider === "anthropic") return sdk.anthropic(modelID)
-          if (provider === "openai") return sdk.openai(modelID)
-          if (provider === "openai-compatible") return sdk.openaiCompatible(modelID)
-          return sdk.languageModel(modelID)
-        },
-      }
-    }),
 
     // Override opencode to prevent auto-connecting without credentials
     opencode: () =>
@@ -288,33 +139,6 @@ export function patchCustomLoaderResult(
     // gitlab User-Agent and cloudflare error message are patched inline
     // in provider.ts with single-line kilocode_change markers
   }
-}
-
-// ---------------------------------------------------------------------------
-// getSmallModel helpers
-// ---------------------------------------------------------------------------
-
-export function kiloSmallModelPriority(providerID: string): string[] | undefined {
-  if (providerID.startsWith("kilo")) return ["kilo-auto/small"]
-  return undefined
-}
-
-/**
- * True when the user has kilo credentials: a KILO_API_KEY env var, a stored
- * auth entry, or an apiKey in the kilo provider config. Mirrors the hasKey
- * check in the kilo custom loader. The kilo provider is autoloaded with an
- * anonymous key even without credentials, so this gates the cloud
- * kilo-auto/small fallback to users who can actually reach it.
- */
-export function hasKiloCredentials(
-  cfg: { provider?: Record<string, { options?: { apiKey?: string } } | null> },
-  auth: unknown,
-  env: Record<string, string | undefined>,
-) {
-  if (env.KILO_API_KEY) return true
-  if (auth) return true
-  if (cfg.provider?.["kilo"]?.options?.apiKey) return true
-  return false
 }
 
 // ---------------------------------------------------------------------------

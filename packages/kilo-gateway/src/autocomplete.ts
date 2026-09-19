@@ -1,5 +1,5 @@
-export type AutocompleteProviderID = "kilo" | "mistral" | "inception"
-export type DirectAutocompleteProviderID = Exclude<AutocompleteProviderID, "kilo">
+export type AutocompleteProviderID = "mistral" | "inception"
+export type DirectAutocompleteProviderID = AutocompleteProviderID
 
 interface AutocompleteModelBase {
   /** Stable combined value for internal comparisons. */
@@ -35,40 +35,7 @@ export type AutocompleteModelDef = AutocompleteModelBase &
       }
   )
 
-const models: AutocompleteModelDef[] = [
-  {
-    id: "kilo/mistralai/codestral-2508",
-    modelID: "mistralai/codestral-2508",
-    label: "Codestral",
-    providerID: "kilo",
-    provider: "Kilo Gateway",
-    requestModel: "mistralai/codestral-2508",
-    temperature: 0.2,
-  },
-  {
-    id: "kilo/inception/mercury-edit-2",
-    modelID: "inception/mercury-edit-2",
-    label: "Mercury Edit 2 (FIM)",
-    providerID: "kilo",
-    provider: "Kilo Gateway",
-    requestModel: "inception/mercury-edit-2",
-    temperature: 0,
-  },
-  {
-    // Same wire-level model as `kilo/inception/mercury-edit-2`, but routed
-    // through the Kilo Gateway's Next Edit endpoint instead of FIM. Picked by
-    // users who want multi-line next-edit predictions with the jump-to-edit UX.
-    id: "kilo/inception/mercury-next-edit",
-    modelID: "inception/mercury-next-edit",
-    label: "Mercury Edit 2 (Next Edit)",
-    providerID: "kilo",
-    provider: "Kilo Gateway",
-    requestModel: "inception/mercury-edit-2",
-    temperature: 0,
-    kind: "edit",
-    fimModelID: "kilo/inception/mercury-edit-2",
-  },
-  {
+const models: AutocompleteModelDef[] = [  {
     id: "mistral/codestral-2508",
     modelID: "codestral-2508",
     label: "Codestral",
@@ -107,7 +74,7 @@ const models: AutocompleteModelDef[] = [
 
 export const AUTOCOMPLETE_MODELS: readonly AutocompleteModelDef[] = models
 
-export const DEFAULT_AUTOCOMPLETE_PROVIDER_ID: AutocompleteProviderID = "kilo"
+export const DEFAULT_AUTOCOMPLETE_PROVIDER_ID: AutocompleteProviderID = "inception"
 export const DEFAULT_AUTOCOMPLETE_MODEL_ID = "inception/mercury-next-edit"
 
 export const DEFAULT_AUTOCOMPLETE_MODEL: AutocompleteModelDef = (() => {
@@ -127,11 +94,8 @@ const aliases: Record<string, string> = {
 }
 
 export function getAutocompleteModel(provider?: string, model?: string): AutocompleteModelDef {
-  // When provider is unset, always default to Kilo Gateway. Direct-provider
-  // use must be opted into explicitly via the provider setting — never inferred
-  // from a model name, since the same plain model id can exist on multiple
-  // providers and we don't want to silently route legacy settings to BYOK.
-  const pid = provider ?? "kilo"
+  // When provider is unset, use the preserved Mercury Next Edit model through its direct provider.
+  const pid = provider ?? DEFAULT_AUTOCOMPLETE_PROVIDER_ID
   const mid = aliases[model ?? ""] ?? model
   for (const m of models) {
     if (m.providerID === pid && m.modelID === mid) return m
